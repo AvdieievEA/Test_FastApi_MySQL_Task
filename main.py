@@ -25,6 +25,7 @@ connection.close()
 
 
 Base.metadata.create_all(engine)
+# Парсер для заповнення бд інфою з .csv файлів з папки db/raw_data
 # fill_db()
 session.commit()
 session.close()

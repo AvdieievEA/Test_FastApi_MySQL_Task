@@ -4,7 +4,7 @@ import os
 from openpyxl import load_workbook
 
 from db.models import User, Payments, Plans, Dictionary, Credits
-from main import session, engine
+from main import session
 
 app = FastAPI(
     debug=True
@@ -69,14 +69,14 @@ async def plans_insert(file: UploadFile):
 
         for row in ws.iter_rows(min_row=2, values_only=True):
             month, category, amount = row
-            # print(f"monoth: {month}, category: {category}, amount: {amount}")
             month = month.date()
-            # print(f"monoth: {month}, category: {category}, amount: {amount}")
             category_id = Dictionary.get_id_by_name(category)
+
             if month is None or not month.strftime("%d") == "01":
                 os.remove(file_path)
                 detail = "Неправильний формат місяця плану, має починатися з першого числf місяця"
                 raise HTTPException(status_code=400, detail=detail)
+
             if amount is None:
                 os.remove(file_path)
                 detail = "Сума не може бути пустою"
@@ -133,20 +133,6 @@ async def get_plans_performance(date: str = Query()):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-# - [ ]  Метод має приймати рік.
-# - [ ]  Метод має повертати наступну зведену інформацію:
-#     - [ ]  Місяць та рік
-#     - [ ]  Кількість видач за місяць
-#     - [ ]  Сума з плану по видачам на місяць
-#     - [ ]  Сума видач за місяць
-#     - [ ]  % виконання плану по видачам
-#     - [ ]  Кількість платежів за місяць
-#     - [ ]  Сума з плану по збору за місяць
-#     - [ ]  Сума платежів за місяць
-#     - [ ]  % виконання плану по збору
-#     - [ ]  % суми видач за місяць від суми видач за рік
-#     - [ ]  % суми платежів за місяць від суми платежів за рік
 
 
 @app.get("/year_performance/")

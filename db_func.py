@@ -1,7 +1,7 @@
 import pandas as pd
 
 from connection import engine
-from db.models import User, Base
+from db.models import Base
 
 
 def fill_db():
