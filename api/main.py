@@ -24,29 +24,30 @@ async def user_credits(user_id: int = Path(description="id клієнта")) -> 
         return{"response": "user not found"}
     user_credits: list[User] | None = user.credits
     response = dict()
-    for credit in user_credits:
-        closed = True if credit.actual_return_date else False
-        credit_info = {
-            "Дата видачі кредиту": credit.issuance_date,
-            "Статус закриття": "Закритий" if closed else "Незакритий",
-            "Сума видачі": credit.body,
-            "Нараховані відсотки": credit.percent
-        }
-        if closed:
-            credit_info["Дата повернення кредиту"] = credit.actual_return_date
-        else:
-            credit_info["Крайня дата повернення кредиту"] = credit.return_date
-            date_diff = datetime.today().date() - credit.return_date
-            credit_info[
-                "Кількість днів прострочення кредиту"
-            ] = date_diff.days
-            credit_info[
-                "Сума платежів по тілу"
-            ] = Payments.get_sum_by_credit(credit.id, "Тіло")
-            credit_info[
-                "Сума платежів по тілу"
-            ] = Payments.get_sum_by_credit(credit.id, "Відсотки")
-        response[credit.id] = credit_info
+    if user_credits:
+        for credit in user_credits:
+            closed = True if credit.actual_return_date else False
+            credit_info = {
+                "Дата видачі кредиту": credit.issuance_date,
+                "Статус закриття": "Закритий" if closed else "Незакритий",
+                "Сума видачі": credit.body,
+                "Нараховані відсотки": credit.percent
+            }
+            if closed:
+                credit_info["Дата повернення кредиту"] = credit.actual_return_date
+            else:
+                credit_info["Крайня дата повернення кредиту"] = credit.return_date
+                date_diff = datetime.today().date() - credit.return_date
+                credit_info[
+                    "Кількість днів прострочення кредиту"
+                ] = date_diff.days
+                credit_info[
+                    "Сума платежів по тілу"
+                ] = Payments.get_sum_by_credit(credit.id, "Тіло")
+                credit_info[
+                    "Сума платежів по тілу"
+                ] = Payments.get_sum_by_credit(credit.id, "Відсотки")
+            response[credit.id] = credit_info
     return response
 
 
