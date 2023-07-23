@@ -52,92 +52,84 @@ async def user_credits(user_id: int = Path(description="id клієнта")) -> 
 
 @app.post("/plans_insert")
 async def plans_insert(file: UploadFile):
-    try:
-        file_path = f"db/raw_data/{file.filename}"
-        with open(file_path, "wb") as f:
-            f.write(await file.read())
+    file_path = f"db/raw_data/{file.filename}"
+    with open(file_path, "wb") as f:
+        f.write(await file.read())
 
-        wb = load_workbook(file_path)
-        ws = wb.active
+    wb = load_workbook(file_path)
+    ws = wb.active
 
-        if ws.cell(row=1, column=1).value != "Місяць плану" or \
-                ws.cell(row=1, column=2).value != "Назва категорії плану (видача/збір)" or \
-                ws.cell(row=1, column=3).value != "Сума (видача/збір)":
+    if ws.cell(row=1, column=1).value != "Місяць плану" or \
+            ws.cell(row=1, column=2).value != "Назва категорії плану (видача/збір)" or \
+            ws.cell(row=1, column=3).value != "Сума (видача/збір)":
+        os.remove(file_path)
+        detail = "Неправильний формат файлу"
+        raise HTTPException(status_code=400, detail=detail)
+
+    for row in ws.iter_rows(min_row=2, values_only=True):
+        month, category, amount = row
+        month = month.date()
+        category_id = Dictionary.get_id_by_name(category)
+
+        if month is None or not month.strftime("%d") == "01":
             os.remove(file_path)
-            detail = "Неправильний формат файлу"
+            detail = "Неправильний формат місяця плану, має починатися з першого числf місяця"
             raise HTTPException(status_code=400, detail=detail)
 
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            month, category, amount = row
-            month = month.date()
-            category_id = Dictionary.get_id_by_name(category)
+        if amount is None:
+            os.remove(file_path)
+            detail = "Сума не може бути пустою"
+            raise HTTPException(status_code=400, detail=detail)
 
-            if month is None or not month.strftime("%d") == "01":
-                os.remove(file_path)
-                detail = "Неправильний формат місяця плану, має починатися з першого числf місяця"
-                raise HTTPException(status_code=400, detail=detail)
+        if Plans.check_if_exists(month.strftime('%d.%m.%Y'), category_id):
+            os.remove(file_path)
+            detail = "План з таким місяцем та категорією вже існує"
+            raise HTTPException(status_code=409, detail=detail)
+        plan = Plans(period=month.strftime('%d.%m.%Y'), category_id=category_id, sum=amount)
+        session.add(plan)
 
-            if amount is None:
-                os.remove(file_path)
-                detail = "Сума не може бути пустою"
-                raise HTTPException(status_code=400, detail=detail)
-
-            if Plans.check_if_exists(month.strftime('%d.%m.%Y'), category_id):
-                os.remove(file_path)
-                detail = "План з таким місяцем та категорією вже існує"
-                raise HTTPException(status_code=409, detail=detail)
-            plan = Plans(period=month.strftime('%d.%m.%Y'), category_id=category_id, sum=amount)
-            session.add(plan)
-
-        session.commit()
+    session.commit()
 
 
-        os.remove(file_path)
+    os.remove(file_path)
 
-        return {"message": "Дані успішно внесено до БД"}
-    except Exception as e:
-        return {"error": str(e)}
+    return {"message": "Дані успішно внесено до БД"}
 
 
 @app.get("/plans_performance/")
 async def get_plans_performance(date: str = Query()):
-    try:
-        date = datetime.strptime(date, "%d.%m.%Y")
-        period = date.replace(day=1)
-        plans = Plans.get_all_by_period(period)
-        if not plans:
-            print("Для цього місяця немає плану")
-            raise HTTPException(status_code=404, detail="Для цього місяця немає плану")
+    date = datetime.strptime(date, "%d.%m.%Y")
+    period = date.replace(day=1)
+    plans = Plans.get_all_by_period(period)
+    if not plans:
+        raise HTTPException(status_code=404, detail="Для цього місяця немає плану")
 
-        result = []
-        for plan in plans:
-            category = plan.category
+    result = []
+    for plan in plans:
+        category = plan.category
 
-            plan_info = {
-                "Місяць плану": plan.period,
-                "Категорія плану": category.name,
-                "Сума з плану": plan.sum,
-            }
-            if category.name == "видача":
-                amount = Credits.get_sum_by_date(period, date)
-                plan_info["Сума виданих кредитів"] = amount
-            elif category.name == "збір":
-                amount = Payments.get_sum_by_date(period, date)
-                plan_info["Сума платежів"] = amount
-            else:
-                amount = 0
-            plan_info["% виконання плану"] = f"{(amount / plan.sum) * 100}" if plan.sum else "0%"
-            result.append(plan_info)
+        plan_info = {
+            "Місяць плану": plan.period,
+            "Категорія плану": category.name,
+            "Сума з плану": plan.sum,
+        }
+        if category.name == "видача":
+            amount = Credits.get_sum_by_date(period, date)
+            plan_info["Сума виданих кредитів"] = amount
+        elif category.name == "збір":
+            amount = Payments.get_sum_by_date(period, date)
+            plan_info["Сума платежів"] = amount
+        else:
+            amount = 0
+        plan_info["% виконання плану"] = f"{(amount / plan.sum) * 100}" if plan.sum else "0%"
+        result.append(plan_info)
 
-        return result
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    return result
 
 
 @app.get("/year_performance/")
 def get_summary_for_year(year: int = Query()):
-    if not isinstance(year, int) or year <= 0:
+    if year <= 0:
         raise HTTPException(status_code=400, detail="Невірно введено рік, будь ласка введіть додатнє число.")
     credit_type_id = Dictionary.get_id_by_name("видача")
     payment_type_id = Dictionary.get_id_by_name("збір")
